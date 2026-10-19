@@ -1,0 +1,3 @@
+ignored:
+  # Debian drops superseded package versions from its repositories, so pins break builds
+  - DL3008

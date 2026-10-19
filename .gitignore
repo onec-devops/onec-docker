@@ -1,0 +1,14 @@
+# 1C distributions are not stored in the repository
+distr/*
+!distr/.gitkeep
+
+# Local settings
+.env
+compose.override.yaml
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store

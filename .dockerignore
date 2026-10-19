@@ -1,0 +1,4 @@
+# Build context: only the installer and scripts
+*
+!distr/*.run
+!docker/

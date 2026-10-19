@@ -1,0 +1,80 @@
+name: onec
+
+x-build-args: &build-args
+  ONEC_VERSION: ${ONEC_VERSION:?set it in .env, see .env.example}
+  ONEC_COMPONENTS: ${ONEC_COMPONENTS:-server,ws}
+
+# The installer is x86_64 only, so ARM hosts must build and run amd64 images too
+x-platform: &platform linux/amd64
+
+x-timezone: &timezone
+  TZ: ${TZ:-Europe/Moscow}
+
+# Only one of the services runs at a time, selected by COMPOSE_PROFILES in .env
+# or by name, such as 'docker compose up -d full'
+services:
+  server:
+    profiles: [server]
+    build:
+      context: .
+      args: *build-args
+    image: ${IMAGE_NAMESPACE:-onec-devops}/1cv8-server:${ONEC_VERSION}
+    platform: *platform
+    # The 1C cluster is bound to the hostname: it must stay constant
+    # and be resolvable by clients (see README).
+    hostname: ${ONEC_HOSTNAME:-onec-server}
+    networks:
+      default:
+        aliases:
+          - ${ONEC_HOSTNAME:-onec-server}
+        # Software licenses are bound to the MAC address among other things (see README)
+        mac_address: ${ONEC_MAC_ADDRESS:-02:1c:08:03:00:01}
+    environment:
+      <<: *timezone
+      ONEC_DEBUG: ${ONEC_DEBUG:-false}
+      ONEC_PORT: ${ONEC_PORT:-1540}
+      ONEC_REGPORT: ${ONEC_REGPORT:-1541}
+      ONEC_RANGE: ${ONEC_RANGE_START:-1560}:${ONEC_RANGE_END:-1591}
+      ONEC_RAS_PORT: ${ONEC_RAS_PORT:-1545}
+      ONEC_DEBUG_PORT: ${ONEC_DEBUG_PORT:-1550}
+    # The cluster reports its own ports to clients, so every port is published
+    # under the same number it has inside the container.
+    ports:
+      - "${ONEC_PORT:-1540}:${ONEC_PORT:-1540}"
+      - "${ONEC_REGPORT:-1541}:${ONEC_REGPORT:-1541}"
+      - "${ONEC_RAS_PORT:-1545}:${ONEC_RAS_PORT:-1545}"
+      # Listens only with ONEC_DEBUG=true
+      - "${ONEC_DEBUG_PORT:-1550}:${ONEC_DEBUG_PORT:-1550}"
+      - "${ONEC_RANGE_START:-1560}-${ONEC_RANGE_END:-1591}:${ONEC_RANGE_START:-1560}-${ONEC_RANGE_END:-1591}"
+    volumes:
+      - srv-data:/home/usr1cv8/.1cv8
+      - licenses:/var/1C/licenses
+      - logs:/var/log/1C
+    restart: unless-stopped
+
+  # The same server with the clients, a virtual display and a VNC server
+  full:
+    extends: server
+    profiles: !override [full]
+    build:
+      target: full
+      args:
+        ONEC_CLIENT_COMPONENTS: ${ONEC_CLIENT_COMPONENTS:-client_thin}
+    image: ${IMAGE_NAMESPACE:-onec-devops}/1cv8-full:${ONEC_VERSION}
+    environment:
+      START_DISPLAY: ${START_DISPLAY:-true}
+      SCREEN_WIDTH: ${SCREEN_WIDTH:-1920}
+      SCREEN_HEIGHT: ${SCREEN_HEIGHT:-1080}
+      SCREEN_DEPTH: ${SCREEN_DEPTH:-24}
+      SCREEN_DPI: ${SCREEN_DPI:-96}
+      # Or VNC_PASSWORD_FILE with the path to a file, such as a Docker secret
+      VNC_PASSWORD: ${VNC_PASSWORD:-}
+    # The virtual display, reachable only from this machine: it has no password by default
+    ports:
+      - "127.0.0.1:${VNC_PORT:-5900}:5900"
+      - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
+
+volumes:
+  srv-data:
+  licenses:
+  logs:

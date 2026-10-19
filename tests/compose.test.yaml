@@ -1,0 +1,8 @@
+# Override of compose.yaml for tests/smoke.sh
+services:
+  server:
+    ports: !reset []
+  full:
+    ports: !reset []
+    environment:
+      VNC_PASSWORD: smoke
