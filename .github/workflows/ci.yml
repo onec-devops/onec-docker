@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+  # Weekly, to catch changes of the dependencies outside the repository
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Hadolint
+        run: docker run --rm -v "$PWD:/work" -w /work hadolint/hadolint:v2.15.1 /bin/hadolint Dockerfile
+      - name: ShellCheck
+        run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.11.0 docker/*.sh tests/*.sh
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        onec-version: [8.3.22.2557, 8.3.25.1633, 8.3.27.2342]
+    env:
+      ONEC_VERSION: ${{ matrix.onec-version }}
+      ONEC_INSTALLER: ghcr.io/${{ github.repository_owner }}/1cv8-installer:${{ matrix.onec-version }}
+      IMAGE_NAMESPACE: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oras-project/setup-oras@v2
+      - name: Download the installer
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          oras login ghcr.io --username "${{ github.actor }}" --password-stdin <<<"$GITHUB_TOKEN"
+          oras pull --output distr "$ONEC_INSTALLER"
+          ls -l distr
+      - name: Configure
+        run: cp .env.example .env
+      - name: Build
+        run: docker compose build server full
+      - name: Test
+        run: tests/smoke.sh
+      - name: Publish
+        if: github.event_name != 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          docker login ghcr.io --username "${{ github.actor }}" --password-stdin <<<"$GITHUB_TOKEN"
+          docker compose push server full
