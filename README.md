@@ -368,3 +368,16 @@ software license is bound to the parameters of the computer, the host name and t
 among them. Compose sets them explicitly, so that they do not change when the container is
 recreated. The other parameters, such as the processor and the memory, the container gets from
 the Docker host. The license files are kept in the `licenses` volume.
+
+## Contributing
+
+Pull requests are welcome: bug fixes, new features, documentation improvements. A larger change
+is better discussed in an issue first. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the images
+are built and tested.
+
+## License
+
+The code in this repository is distributed under the [Apache License 2.0](LICENSE). It does not
+cover the 1C:Enterprise platform installed into the images.
+
+The build accepts the license agreement of the Microsoft Core Fonts automatically.
