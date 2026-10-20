@@ -17,7 +17,7 @@ issue first to agree on the approach.
 | Path | Purpose |
 |---|---|
 | `Dockerfile` | Builds the images on Debian 12 (bookworm-slim). |
-| `docker/install-1cv8.sh` | Installs the platform from `distr/` unattended. |
+| `docker/install-1cv8.sh` | Installs the platform from its archive in `distr/` unattended. |
 | `docker/entrypoint.sh` | Starts `ragent` with `ras` or the standalone server `ibsrv` with the parameters from the environment variables, and in the `full` image also the virtual display. |
 | `docker/healthcheck.sh` | Checks whether the server running in the container is ready. |
 | `docker/ibsrv.yml` | The default settings of the standalone server, with which it listens on all addresses, not only on `localhost`. |
@@ -25,7 +25,7 @@ issue first to agree on the approach.
 | `tests/` | Tests of the built images. |
 | `.github/workflows/` | Lints, builds and tests the images in GitHub Actions. |
 
-The installer is bind-mounted into the build rather than copied, so it does not end up in a
+The archive is bind-mounted into the build rather than copied, so it does not end up in a
 layer. The platform is installed in separate stages and copied into the images, which share
 everything else in the `runtime` stage.
 
@@ -69,15 +69,15 @@ the CI of a project that tests against the platform, get read access to them und
 "Manage Actions access" in the package settings. The packages must stay private, because the
 images contain the platform, and a package made public cannot be made private again.
 
-The workflow downloads the platform installer from the GitHub Container registry, where it is
+The workflow downloads the platform archive from the GitHub Container registry, where it is
 kept as the private package `1cv8-installer` of the repository owner, tagged with the platform
-version. The installer is uploaded from `distr/` with [ORAS](https://oras.land):
+version. The archive is uploaded from `distr/` with [ORAS](https://oras.land):
 
 ```sh
 cd distr
 oras login ghcr.io -u <GitHub user name>
 oras push --artifact-type application/vnd.onec-devops.1cv8.installer \
-    ghcr.io/<repository owner>/1cv8-installer:8.3.25.1633 setup-full-8.3.25.1633-x86_64.run
+    ghcr.io/<repository owner>/1cv8-installer:8.3.25.1633 server64_8_3_25_1633.zip
 ```
 
 The login needs a classic personal access token with the `write:packages` scope. A new package is
@@ -86,7 +86,7 @@ private. To let the workflow download it, add the repository with the `Read` rol
 workflow.
 
 The platform versions under test are listed in `matrix.onec-version` of the workflow, and each of
-them needs its installer in the registry.
+them needs its archive in the registry.
 
 ## License
 

@@ -14,7 +14,7 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 
 ## Requirements
 
-- The 1C:Enterprise 8.3 platform installer for Linux x86_64. The project is tested with
+- The 1C:Enterprise 8.3 platform distribution for Linux x86_64. The project is tested with
   8.3.25.1633.
 - Docker Engine with BuildKit, or Docker Desktop.
 - Docker Compose 2.24.4 or newer.
@@ -29,9 +29,10 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 
 ## Getting started
 
-1. Download the platform installer for Linux, `setup-full-<version>-x86_64.run`, from
-   https://releases.1c.ru and put it into `distr/`. The directory must hold exactly one
-   installer, its file name does not matter.
+1. Download the platform distribution for Linux from https://releases.1c.ru, the archive
+   `server64_<version>.zip` or `.tar.gz`, and put it into `distr/` without unpacking. The
+   build takes the archive by the version, so the directory may hold archives of several
+   versions.
 
 2. Copy `.env.example` to `.env` and set `ONEC_VERSION` in it to the platform version, for
    example `8.3.25.1633`:
@@ -72,7 +73,7 @@ the variables. Only `ONEC_VERSION` is required, compose commands do not run with
 
 | Variable | Default | Description |
 |---|---|---|
-| `ONEC_VERSION` | | The platform version. It must match the version of the installer in `distr/`. |
+| `ONEC_VERSION` | | The platform version. The build takes the archive of this version from `distr/`. |
 | `COMPOSE_PROFILES` | | The service for compose commands without a service name, `server` or `full`, see [Running the server](#running-the-server). |
 | `IMAGE_NAMESPACE` | `onec-devops` | The prefix of the image names `onec-devops/1cv8-server` and `onec-devops/1cv8-full`. |
 | `NOVNC_PORT` | `6080` | The host port of the noVNC page of the `full` image, see [Running clients](#running-clients). |
@@ -81,6 +82,7 @@ the variables. Only `ONEC_VERSION` is required, compose commands do not run with
 | `ONEC_DEBUG` | `false` | Turns debugging on, see [Debugging](#debugging). |
 | `ONEC_DEBUG_PORT` | `1550` | The port of the debug server. |
 | `ONEC_HOSTNAME` | `onec-server` | The name clients connect to the server by, see [Connecting to the server](#connecting-to-the-server). |
+| `ONEC_ARCHIVE` | `server64_<version>.zip` or `.tar.gz` | The name of the platform archive in `distr/`, if it differs from the one on releases.1c.ru. |
 | `ONEC_MAC_ADDRESS` | `02:1c:08:03:00:01` | The MAC address of the server. Software licenses are bound to it. |
 | `ONEC_PORT` | `1540` | The port of the server agent. |
 | `ONEC_RANGE_START` / `ONEC_RANGE_END` | `1560` / `1591` | The port range of the worker processes. |
@@ -345,7 +347,7 @@ client is then started with `1cv8c ENTERPRISE /WS http://localhost:8314`.
 
 ## Changing the platform version
 
-1. Put the installer of the new version into `distr/` in place of the old one.
+1. Put the archive of the new version into `distr/`.
 2. Set the new version in `ONEC_VERSION` in `.env`.
 3. Rebuild the image and restart the server:
 

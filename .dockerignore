@@ -1,4 +1,5 @@
-# Build context: only the installer and scripts
+# Build context: only the distribution archives and scripts
 *
-!distr/*.run
+!distr/*.zip
+!distr/*.tar.gz
 !docker/
