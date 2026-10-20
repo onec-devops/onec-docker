@@ -2,26 +2,37 @@
 
 FROM debian:bookworm-slim AS installer-base
 
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Some platform versions come in .zip archives
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends unzip \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --link --chmod=755 docker/install-1cv8.sh /usr/local/bin/install-1cv8.sh
 
-# The installer is mounted rather than copied, so it does not end up in a layer.
+# The archive is mounted rather than copied, so it does not end up in a layer.
 FROM installer-base AS installer-server
 
 ARG ONEC_VERSION
+ARG ONEC_ARCHIVE
 ARG ONEC_COMPONENTS=server,ws
 
-RUN --mount=type=bind,source=distr,target=/tmp/distr,rw \
-    ONEC_VERSION="${ONEC_VERSION}" ONEC_COMPONENTS="${ONEC_COMPONENTS}" \
+RUN --mount=type=bind,source=distr,target=/tmp/distr \
+    ONEC_VERSION="${ONEC_VERSION}" ONEC_ARCHIVE="${ONEC_ARCHIVE}" \
+    ONEC_COMPONENTS="${ONEC_COMPONENTS}" \
     install-1cv8.sh /tmp/distr
 
 FROM installer-base AS installer-full
 
 ARG ONEC_VERSION
+ARG ONEC_ARCHIVE
 ARG ONEC_COMPONENTS=server,ws
 ARG ONEC_CLIENT_COMPONENTS=client_thin
 
-RUN --mount=type=bind,source=distr,target=/tmp/distr,rw \
-    ONEC_VERSION="${ONEC_VERSION}" ONEC_COMPONENTS="${ONEC_COMPONENTS},${ONEC_CLIENT_COMPONENTS}" \
+RUN --mount=type=bind,source=distr,target=/tmp/distr \
+    ONEC_VERSION="${ONEC_VERSION}" ONEC_ARCHIVE="${ONEC_ARCHIVE}" \
+    ONEC_COMPONENTS="${ONEC_COMPONENTS},${ONEC_CLIENT_COMPONENTS}" \
     install-1cv8.sh /tmp/distr
 
 # Removes installers of the client application agent (shipped with client_full),

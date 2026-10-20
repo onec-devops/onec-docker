@@ -44,7 +44,7 @@ jobs:
         onec-version: [8.3.22.2557, 8.3.25.1633, 8.3.27.2342]
     env:
       ONEC_VERSION: ${{ matrix.onec-version }}
-      ONEC_INSTALLER: ghcr.io/${{ github.repository_owner }}/1cv8-installer:${{ matrix.onec-version }}
+      ONEC_ARCHIVE_PACKAGE: ghcr.io/${{ github.repository_owner }}/1cv8-installer:${{ matrix.onec-version }}
       IMAGE_NAMESPACE: ghcr.io/${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@v7
@@ -56,7 +56,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           oras login ghcr.io --username "${{ github.actor }}" --password-stdin <<<"$GITHUB_TOKEN"
-          oras pull --output distr "$ONEC_INSTALLER"
+          oras pull --output distr "$ONEC_ARCHIVE_PACKAGE"
           ls -l distr
       - name: Configure
         run: cp .env.example .env

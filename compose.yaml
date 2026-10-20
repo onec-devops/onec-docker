@@ -2,6 +2,7 @@ name: onec
 
 x-build-args: &build-args
   ONEC_VERSION: ${ONEC_VERSION:?set it in .env, see .env.example}
+  ONEC_ARCHIVE: ${ONEC_ARCHIVE:-}
   ONEC_COMPONENTS: ${ONEC_COMPONENTS:-server,ws}
 
 # The installer is x86_64 only, so ARM hosts must build and run amd64 images too
