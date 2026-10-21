@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        onec-version: [8.3.22.2557, 8.3.25.1633, 8.3.27.2342]
+        onec-version: [8.3.20.2290, 8.3.22.2557, 8.3.25.1633, 8.3.27.2342]
     env:
       ONEC_VERSION: ${{ matrix.onec-version }}
       ONEC_ARCHIVE_PACKAGE: ghcr.io/${{ github.repository_owner }}/1cv8-installer:${{ matrix.onec-version }}

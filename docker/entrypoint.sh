@@ -172,7 +172,8 @@ case "$cmd" in
                         ;;
                     1CIBDmpF)
                         if ! "$ONEC_HOME/ibcmd" infobase create --data="$data" --restore="$source"; then
-                            rm -f "$infobase"
+                            # Without the infobase the next start restores again
+                            rm -rf "$data"
                             die "ONEC_INFOBASE_SOURCE: cannot restore the infobase from $source"
                         fi
                         ;;

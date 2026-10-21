@@ -114,8 +114,11 @@ RUN sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.lis
         libgsf-1-114 \
         libgssapi-krb5-2 \
         libkrb5-3 \
+        liblcms2-2 \
         libnss-wrapper \
+        libssh-4 \
         locales \
+        netbase \
         procps \
         tini \
         ttf-mscorefonts-installer \
