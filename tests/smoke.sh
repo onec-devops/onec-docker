@@ -2,8 +2,8 @@
 # Smoke tests for the built images, reported in TAP format (https://testanything.org).
 # Run after `docker compose build server` (and `docker compose build full` for part 4):
 #   1. Server image: version label, user, locale, fonts, time zone, shared libraries
-#      of the binaries, no clients, ibcmd runs as an arbitrary user, arguments that start
-#      with a key go to ragent, a ragent key the image sets itself is refused.
+#      of the binaries and modules, no clients, ibcmd runs as an arbitrary user, arguments
+#      that start with a key go to ragent, a ragent key the image sets itself is refused.
 #   2. Standalone server: the ibsrv command creates an empty file infobase on the first
 #      start and serves it over OData, keeps it on restart and stops on docker stop,
 #      takes the infobase from a .1CD or .dt file in ONEC_INFOBASE_SOURCE, asked for help
@@ -113,11 +113,12 @@ in_full_image() {
 }
 
 # Libraries that are not found, and libraries too old for a library that needs them
-# (such as an older C++ runtime shipped with the platform)
+# (such as an older C++ runtime shipped with the platform). The modules are checked too:
+# the binaries load them at run time.
 missing_libraries() {
     # shellcheck disable=SC2016 # expanded inside the container
     in_image bash -c '
-        for f in "$ONEC_HOME"/{ragent,rmngr,rphost,ras,rac,ibcmd,ibsrv}; do
+        for f in "$ONEC_HOME"/{ragent,rmngr,rphost,ras,rac,ibcmd,ibsrv} "$ONEC_HOME"/*.so; do
             ldd "$f" | sed -n -e "s|^\s*\(\S*\) => not found|$(basename "$f"): \1|p" \
                 -e "s|^\S*: \S*/\(\S*\): version .\(\S*\). not found.*|$(basename "$f"): \1 has no \2|p"
         done | sort -u'
@@ -241,17 +242,19 @@ image_key_refused() {
 }
 
 # The ibsrv command given its own infobase location; prints the command line of ibsrv
-# and the infobases found in the container
+# and the infobases found in the container other than its own. The infobase is created
+# beforehand, because without it some versions, such as 8.3.20, stop ibsrv at once.
 ibsrv_with_own_infobase() {
     # shellcheck disable=SC2016 # expanded inside the container
     docker run --rm --entrypoint bash "$image" -c '
+        ibcmd infobase create --db-path=/tmp/ib >/dev/null
         entrypoint.sh ibsrv --db-path=/tmp/ib >/dev/null 2>&1 &
         for _ in $(seq 30); do
             pgrep -x ibsrv >/dev/null && break
             sleep 1
         done
         ps -o args= -C ibsrv
-        find / -name 1Cv8.1CD 2>/dev/null || true'
+        find / -name 1Cv8.1CD -not -path "/tmp/ib/*" 2>/dev/null || true'
 }
 
 # The ibsrv command with a settings file of the user among the settings of the platform;
@@ -290,11 +293,14 @@ make_seed_infobase() {
     docker volume create "$seed_volume" >/dev/null
     docker run --rm --user 0 -v "$seed_volume:/seed" "$image" chmod 777 /seed
     docker run --rm -v "$seed_volume:/seed" "$image" bash -c '
+        set -e
         ibcmd infobase create --data=/tmp/ib
-        ibcmd infobase config extension create --data=/tmp/ib --name=Seed --name-prefix=Seed_
+        # 8.3.20 creates the extension but exits with 102, so the extension is looked up instead
+        ibcmd infobase config extension create --data=/tmp/ib --name=Seed --name-prefix=Seed_ || true
+        ibcmd infobase config extension list --data=/tmp/ib | grep -qw Seed
         ibcmd infobase dump --data=/tmp/ib /seed/dump
         cp /tmp/ib/db-data/1Cv8.1CD /seed/seed.1CD
-        head -c 4096 /seed/dump >/seed/truncated.dt
+        head -c $(($(stat -c %s /seed/dump) / 2)) /seed/dump >/seed/truncated.dt
         echo garbage >/seed/garbage.dt'
 }
 
@@ -311,13 +317,13 @@ infobase_from() {
 }
 
 # infobase_source_refused <file>: output of the ibsrv command that cannot use the file
-# and the infobases it left behind; fails if the command succeeds
+# and what it left in the server data directory; fails if the command succeeds
 infobase_source_refused() {
     # shellcheck disable=SC2016 # expanded inside the container
     docker run --rm -v "$seed_volume:/seed:ro" -e ONEC_INFOBASE_SOURCE="/seed/$1" \
         --entrypoint bash "$image" -c '
             if timeout 60 entrypoint.sh ibsrv 2>&1; then exit 1; fi
-            echo "infobases left: [$(find "$ONEC_SRV_DATA" -name "1Cv8.1CD*")]"'
+            echo "data left: [$(find "$ONEC_SRV_DATA" -mindepth 1)]"'
 }
 
 # Restarts the ibsrv container and succeeds if it serves the same infobase file again;
@@ -450,8 +456,9 @@ check_eq "version label is $version" "$version" \
 check_eq "runs as usr1cv8 with fixed uid/gid" "uid=999(usr1cv8) gid=999(grp1cv8) groups=999(grp1cv8)" in_image id
 # shellcheck disable=SC2016 # expanded inside the container
 check_eq "locale is ru_RU.UTF-8" ru_RU.UTF-8 in_image bash -c 'locale -a | grep -qx ru_RU.utf8 && echo "$LANG"'
-check "clients are not installed" in_image bash -c "! ls $onec_home/1cv8 $onec_home/1cv8c $onec_home/1cv8s 2>/dev/null"
-check_eq "shared libraries of the binaries are resolved" "" missing_libraries
+check_eq "clients are not installed" "" \
+    in_image find "$onec_home/" -maxdepth 1 \( -name 1cv8 -o -name 1cv8c -o -name 1cv8s \)
+check_eq "shared libraries of the binaries and modules are resolved" "" missing_libraries
 check_eq "Microsoft Core Fonts are installed" Arial in_image fc-match -f '%{family[0]}' Arial
 check_eq "time zone is Europe/Moscow" MSK in_image date +%Z
 check "ibcmd creates an infobase as an arbitrary user" \
@@ -479,13 +486,13 @@ if output=$(make_seed_infobase 2>&1); then
     check_contains "ibsrv takes the infobase from a .1CD file in ONEC_INFOBASE_SOURCE" '"Seed"' infobase_from seed.1CD
     check_contains "ibsrv restores the infobase from a dump under any name in ONEC_INFOBASE_SOURCE" '"Seed"' infobase_from dump
     check_eq "ibsrv refuses a missing file in ONEC_INFOBASE_SOURCE and creates no infobase" \
-        $'entrypoint: ONEC_INFOBASE_SOURCE: no file /seed/missing.dt\ninfobases left: []' \
+        $'entrypoint: ONEC_INFOBASE_SOURCE: no file /seed/missing.dt\ndata left: []' \
         infobase_source_refused missing.dt
-    check_contains "ibsrv leaves no infobase when the dump cannot be restored" \
-        $'entrypoint: ONEC_INFOBASE_SOURCE: cannot restore the infobase from /seed/truncated.dt\ninfobases left: []' \
+    check_contains "ibsrv leaves no data when the dump cannot be restored" \
+        $'entrypoint: ONEC_INFOBASE_SOURCE: cannot restore the infobase from /seed/truncated.dt\ndata left: []' \
         infobase_source_refused truncated.dt
     check_eq "ibsrv refuses a file that is neither a file infobase nor a dump" \
-        $'entrypoint: ONEC_INFOBASE_SOURCE: /seed/garbage.dt is neither a file infobase nor a dump\ninfobases left: []' \
+        $'entrypoint: ONEC_INFOBASE_SOURCE: /seed/garbage.dt is neither a file infobase nor a dump\ndata left: []' \
         infobase_source_refused garbage.dt
 else
     not_ok "an infobase to start ibsrv from is prepared" "$output"
@@ -519,8 +526,8 @@ if docker image inspect "$full_image" >/dev/null 2>&1; then
     check "ping is installed for Vanessa Automation" in_full_image ping -c 1 -W 1 127.0.0.1
     check_eq "novnc_proxy serves noVNC and the display over WebSocket" $'HTTP/1.1 200 OK\nRFB 003.008' novnc_banner
     check_eq "shared libraries of the clients, modules and 1cestart are resolved" "" missing_client_libraries
-    check "unused installer files are removed" in_full_image bash -c \
-        "test ! -e $onec_home/ExtDst && ! ls $onec_home/*.wk41 /opt/1cv8/common/*.wk41 2>/dev/null"
+    check_eq "unused installer files are removed" "" \
+        in_full_image find "$onec_home/" /opt/1cv8/common/ -maxdepth 1 \( -name ExtDst -o -name '*.wk41' \)
     check "thin client opens the infobase on a virtual display" thin_client_opens
     check "thin client opens the infobase as an arbitrary user" thin_client_opens --user "$arbitrary_user"
     check "the ibsrv command runs the standalone server with the display" ibsrv_with_display
