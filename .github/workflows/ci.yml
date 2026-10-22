@@ -32,7 +32,9 @@ jobs:
       - name: ShellCheck
         run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.11.0 docker/*.sh tests/*.sh
 
-  test:
+  build-and-push-image:
+    # The tag of the images, such as 8.3.27.2342 or 8.3.27.2342-edt-2026.1.3
+    name: ${{ matrix.edt-version && format('{0}-edt-{1}', matrix.onec-version, matrix.edt-version) || matrix.onec-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -40,34 +42,47 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
+      # Every platform version, without 1C:EDT and with the latest 1C:EDT
       matrix:
         onec-version: [8.3.20.2290, 8.3.22.2557, 8.3.25.1633, 8.3.27.2342]
+        variant: [platform, edt]
+        include:
+          - variant: platform
+            services: server full
+          - variant: edt
+            services: server-edt full-edt
+            edt-version: 2026.1.3
     env:
       ONEC_VERSION: ${{ matrix.onec-version }}
       ONEC_ARCHIVE_PACKAGE: ghcr.io/${{ github.repository_owner }}/1cv8-installer:${{ matrix.onec-version }}
+      EDT_VERSION: ${{ matrix.edt-version }}
+      EDT_ARCHIVE_PACKAGE: ghcr.io/${{ github.repository_owner }}/1cedt-installer:${{ matrix.edt-version }}
       IMAGE_NAMESPACE: ghcr.io/${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: oras-project/setup-oras@v2
-      - name: Download the installer
+      - name: Download the installers
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           oras login ghcr.io --username "${{ github.actor }}" --password-stdin <<<"$GITHUB_TOKEN"
           oras pull --output distr "$ONEC_ARCHIVE_PACKAGE"
+          if [[ -n $EDT_VERSION ]]; then
+              oras pull --output distr "$EDT_ARCHIVE_PACKAGE"
+          fi
           ls -l distr
       - name: Configure
         run: cp .env.example .env
       - name: Build
-        run: docker compose build server full
+        run: docker compose build ${{ matrix.services }}
       - name: Test
-        run: tests/smoke.sh
+        run: tests/smoke.sh ${{ matrix.services }}
       - name: Publish
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           docker login ghcr.io --username "${{ github.actor }}" --password-stdin <<<"$GITHUB_TOKEN"
-          docker compose push server full
+          docker compose push ${{ matrix.services }}

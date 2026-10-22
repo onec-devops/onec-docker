@@ -5,6 +5,11 @@ x-build-args: &build-args
   ONEC_ARCHIVE: ${ONEC_ARCHIVE:-}
   ONEC_COMPONENTS: ${ONEC_COMPONENTS:-server,ws}
 
+x-edt-build-args: &edt-build-args
+  EDT_VERSION: ${EDT_VERSION:-}
+  EDT_ARCHIVE: ${EDT_ARCHIVE:-}
+  EDT_PLATFORM_VERSIONS: ${EDT_PLATFORM_VERSIONS:-}
+
 # The installer is x86_64 only, so ARM hosts must build and run amd64 images too
 x-platform: &platform linux/amd64
 
@@ -74,6 +79,24 @@ services:
     ports:
       - "127.0.0.1:${VNC_PORT:-5900}:5900"
       - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
+
+  # The server with 1C:EDT
+  server-edt:
+    extends: server
+    profiles: !override [server-edt]
+    build:
+      target: server-edt
+      args: *edt-build-args
+    image: ${IMAGE_NAMESPACE:-onec-devops}/1cv8-server:${ONEC_VERSION}-edt-${EDT_VERSION:-}
+
+  # The full service with 1C:EDT
+  full-edt:
+    extends: full
+    profiles: !override [full-edt]
+    build:
+      target: full-edt
+      args: *edt-build-args
+    image: ${IMAGE_NAMESPACE:-onec-devops}/1cv8-full:${ONEC_VERSION}-edt-${EDT_VERSION:-}
 
 volumes:
   srv-data:

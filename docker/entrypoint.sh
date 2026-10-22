@@ -65,8 +65,9 @@ stop_ibsrv() {
     kill -KILL "$1" 2>/dev/null || true
 }
 
-# A user given with --user may have no entry in /etc/passwd, and the platform crashes
-# without one, so nss_wrapper supplies it, the way the postgres image does
+# A user given with --user may have no entry in /etc/passwd. The platform crashes without
+# one, and Java, which runs 1C:EDT, takes the home directory only from there, so nss_wrapper
+# supplies it, the way the postgres image does
 if ! getent passwd "$(id -u)" >/dev/null; then
     NSS_WRAPPER_PASSWD=$(mktemp)
     NSS_WRAPPER_GROUP=$(mktemp)
