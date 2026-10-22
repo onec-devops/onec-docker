@@ -5,6 +5,7 @@ English | [Русский](README_ru.md)
 The 1C:Enterprise 8.3 platform in Docker. A server in a container suits development and test
 environments: it is easy to start, to recreate from scratch or to move to another platform
 version. The `full` image runs the same server with the platform clients and a virtual display.
+The `server-edt` and `full-edt` images add 1C:EDT to `server` and `full`.
 
 The stack has no DBMS, so server infobases need a separate PostgreSQL or Microsoft SQL Server.
 
@@ -15,10 +16,13 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 ## Requirements
 
 - The 1C:Enterprise 8.3 platform distribution for Linux x86_64. The project is tested with
-  8.3.25.1633.
+  8.3.20.2290, 8.3.22.2557, 8.3.25.1633 and 8.3.27.2342.
+- For the `server-edt` and `full-edt` images, the offline distribution of 1C:EDT for Linux.
+  The project is tested with 2026.1.3.
 - Docker Engine with BuildKit, or Docker Desktop.
 - Docker Compose 2.24.4 or newer.
-- At least 8 GB of free disk space to build the images, 16 GB with `full`.
+- Free disk space. At least 8 GB to build `server`, about 2 GB for the built image. For `full`
+  16 and 3.5 GB, for `server-edt` 25 and 5.5 GB, for `full-edt` 35 and 7 GB.
 
 ## Images
 
@@ -26,6 +30,8 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 |---|---|
 | `onec-devops/1cv8-server` | The 1C:Enterprise server with the administration server and the `rac`, `ibcmd` and `ibsrv` utilities. It has no clients. |
 | `onec-devops/1cv8-full` | The same server with the clients, a virtual display and a VNC server to watch the display from the host, also in a browser. It runs the clients in the container itself, for example for automated tests. Only the thin client is installed by default, the thick one can be added. |
+| `onec-devops/1cv8-server:<version>-edt-<EDT version>` | The same server with 1C:EDT. It builds 1C:EDT projects: `1cedtcli` exports a project to XML files, and `ibcmd` makes a configuration file of them. |
+| `onec-devops/1cv8-full:<version>-edt-<EDT version>` | The `full` image with 1C:EDT, for a project built from 1C:EDT sources and tested in the clients in the same container. |
 
 ## Getting started
 
@@ -35,7 +41,7 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
    versions.
 
 2. Copy `.env.example` to `.env` and set `ONEC_VERSION` in it to the platform version, for
-   example `8.3.25.1633`:
+   example `8.3.27.2342`:
 
    ```sh
    cp .env.example .env
@@ -47,7 +53,7 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
    docker compose build server
    ```
 
-   The result is the image `onec-devops/1cv8-server:8.3.25.1633`, tagged with the platform
+   The result is the image `onec-devops/1cv8-server:8.3.27.2342`, tagged with the platform
    version.
 
 4. Start the server:
@@ -74,27 +80,30 @@ the variables. Only `ONEC_VERSION` is required, compose commands do not run with
 | Variable | Default | Description |
 |---|---|---|
 | `ONEC_VERSION` | | The platform version. The build takes the archive of this version from `distr/`. |
-| `COMPOSE_PROFILES` | | The service for compose commands without a service name, `server` or `full`, see [Running the server](#running-the-server). |
-| `IMAGE_NAMESPACE` | `onec-devops` | The prefix of the image names `onec-devops/1cv8-server` and `onec-devops/1cv8-full`. |
-| `NOVNC_PORT` | `6080` | The host port of the noVNC page of the `full` image, see [Running clients](#running-clients). |
-| `ONEC_CLIENT_COMPONENTS` | `client_thin` | Components installed only into the `full` image, separated by commas, see [Platform components](#platform-components). |
-| `ONEC_COMPONENTS` | `server,ws` | Components installed into both images, separated by commas, see [Platform components](#platform-components). |
-| `ONEC_DEBUG` | `false` | Turns debugging on, see [Debugging](#debugging). |
-| `ONEC_DEBUG_PORT` | `1550` | The port of the debug server. |
-| `ONEC_HOSTNAME` | `onec-server` | The name clients connect to the server by, see [Connecting to the server](#connecting-to-the-server). |
 | `ONEC_ARCHIVE` | `server64_<version>.zip` or `.tar.gz` | The name of the platform archive in `distr/`, if it differs from the one on releases.1c.ru. |
+| `ONEC_COMPONENTS` | `server,ws` | Components installed into all the images, separated by commas, see [Platform components](#platform-components). |
+| `ONEC_CLIENT_COMPONENTS` | `client_thin` | Components installed only into the `full` and `full-edt` images, separated by commas, see [Platform components](#platform-components). |
+| `EDT_VERSION` | | The 1C:EDT version of the `server-edt` and `full-edt` images. The build takes the archive of this version from `distr/`. |
+| `EDT_ARCHIVE` | `1c_edt_distr_offline_<version>_<build>_linux_x86_64.tar.gz` | The name of the 1C:EDT archive in `distr/`, if it differs from the one on releases.1c.ru. |
+| `EDT_PLATFORM_VERSIONS` | the platform version of the image | The platform versions 1C:EDT of the `server-edt` and `full-edt` images supports, separated by commas, see [1C:EDT](#1cedt). |
+| `IMAGE_NAMESPACE` | `onec-devops` | The prefix of the image names `onec-devops/1cv8-server` and `onec-devops/1cv8-full`. |
+| `COMPOSE_PROFILES` | | The service for compose commands without a service name, `server`, `full`, `server-edt` or `full-edt`, see [Running the server](#running-the-server). |
+| `ONEC_HOSTNAME` | `onec-server` | The name clients connect to the server by, see [Connecting to the server](#connecting-to-the-server). |
 | `ONEC_MAC_ADDRESS` | `02:1c:08:03:00:01` | The MAC address of the server. Software licenses are bound to it. |
+| `TZ` | `Europe/Moscow` | The time zone of the containers. The time `ТекущаяДата()` returns on the server depends on it. |
+| `ONEC_DEBUG` | `false` | Turns debugging on, see [Debugging](#debugging). |
 | `ONEC_PORT` | `1540` | The port of the server agent. |
+| `ONEC_REGPORT` | `1541` | The port of the cluster manager. |
 | `ONEC_RANGE_START` / `ONEC_RANGE_END` | `1560` / `1591` | The port range of the worker processes. |
 | `ONEC_RAS_PORT` | `1545` | The port of the administration server. |
-| `ONEC_REGPORT` | `1541` | The port of the cluster manager. |
+| `ONEC_DEBUG_PORT` | `1550` | The port of the debug server. |
+| `START_DISPLAY` | `true` | Whether the `full` image starts the virtual display, see [Running clients](#running-clients). |
+| `VNC_PORT` | `5900` | The host port of the VNC server of the `full` image, see [Running clients](#running-clients). |
+| `VNC_PASSWORD` | | The password of the VNC server of the `full` image, at most 8 characters. noVNC asks for it too. There is no password by default, see [Running clients](#running-clients). |
+| `NOVNC_PORT` | `6080` | The host port of the noVNC page of the `full` and `full-edt` images, see [Running clients](#running-clients). |
 | `SCREEN_WIDTH` / `SCREEN_HEIGHT` | `1920` / `1080` | The width and the height of the virtual display of the `full` image in pixels. |
 | `SCREEN_DEPTH` | `24` | The color depth of the virtual display in bits. |
 | `SCREEN_DPI` | `96` | The resolution of the virtual display. The size of the fonts depends on it. |
-| `START_DISPLAY` | `true` | Whether the `full` image starts the virtual display, see [Running clients](#running-clients). |
-| `TZ` | `Europe/Moscow` | The time zone of the containers. The time `ТекущаяДата()` returns on the server depends on it. |
-| `VNC_PASSWORD` | | The password of the VNC server of the `full` image, at most 8 characters. noVNC asks for it too. There is no password by default, see [Running clients](#running-clients). |
-| `VNC_PORT` | `5900` | The host port of the VNC server of the `full` image, see [Running clients](#running-clients). |
 
 ### Platform components
 
@@ -158,14 +167,14 @@ The files are described in the administrator guide, in the appendix
 ## Running the server
 
 `docker compose up -d` starts the service from `COMPOSE_PROFILES` in `.env`, which is `server` in
-`.env.example`. With `COMPOSE_PROFILES=full` the `full` service runs instead. The services do not
-run at the same time, because they take the same ports. So the server is stopped with
-`docker compose down` before the value is changed, after the change the command no longer sees
-it.
+`.env.example`. With `full`, `server-edt` or `full-edt` in `COMPOSE_PROFILES` that service runs
+instead. The services do not run at the same time, because they take the same ports.
+So the server is stopped with `docker compose down` before the value is changed, after the change
+the command no longer sees it.
 
 The container runs the 1C server and the administration server `ras`, through which `rac`
-manages the cluster. If either of them exits, the container restarts. For the `full` image, `full`
-takes the place of `server` in this and the following commands.
+manages the cluster. If either of them exits, the container restarts. For the other images, the
+name of their service takes the place of `server` in this and the following commands.
 
 If Docker reports on start that a port is already taken, the server needs other ports, see
 [Changing ports](#changing-ports).
@@ -275,7 +284,7 @@ A separate container from the same image, not connected to the running server, i
 this:
 
 ```sh
-docker run --rm -it onec-devops/1cv8-server:8.3.25.1633 bash
+docker run --rm -it onec-devops/1cv8-server:8.3.27.2342 bash
 ```
 
 `docker compose run server` does not suit this, because it creates a second container with the
@@ -295,7 +304,7 @@ directory, for example saves a configuration file there, the container can run a
 with `--user`. The files on the host then belong to that user:
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.25.1633 \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342 \
     ibcmd infobase create --db-path=/work/ib
 ```
 
@@ -345,6 +354,43 @@ By default the thin client does not open file infobases directly. A file infobas
 The container does this itself when it runs as a [standalone server](#standalone-server), and the
 client is then started with `1cv8c ENTERPRISE /WS http://localhost:8314`.
 
+## 1C:EDT
+
+The `server-edt` and `full-edt` images are built from the offline distribution of 1C:EDT for Linux,
+the archive `1c_edt_distr_offline_<version>_<build>_linux_x86_64.tar.gz` from
+https://releases.1c.ru. It is put into `distr/` next to the platform archive without unpacking,
+and its version is set in `EDT_VERSION` in `.env`:
+
+```sh
+EDT_VERSION=2026.1.3
+```
+
+Then the image is built:
+
+```sh
+docker compose build server-edt
+```
+
+The result is the image `onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3`, tagged with the platform
+version and the 1C:EDT version. `docker compose build full-edt` builds
+`onec-devops/1cv8-full:8.3.27.2342-edt-2026.1.3`.
+
+1C:EDT exports a project only if it supports the platform version of the project, the
+`Runtime-Version` line in `DT-INF/PROJECT.PMF`. The image supports only the version of its
+platform, such as 8.3.27 for 8.3.27.2342. Other versions are listed in `EDT_PLATFORM_VERSIONS`,
+separated by commas, for example `EDT_PLATFORM_VERSIONS=8.3.22,8.3.27`.
+
+`1cedtcli` is called by name, and the directory of 1C:EDT is in `EDT_HOME`. This command exports
+the project in the `my-project` directory and builds `my-project.cf` from it:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3 bash -c '
+    1cedtcli -data /tmp/workspace -timeout 600 -command export \
+        --project /work/my-project --configuration-files /tmp/xml
+    ibcmd infobase create --db-path=/tmp/ib --import=/tmp/xml
+    ibcmd infobase config save --db-path=/tmp/ib /work/my-project.cf'
+```
+
 ## Changing the platform version
 
 1. Put the archive of the new version into `distr/`.
@@ -380,6 +426,6 @@ are built and tested.
 ## License
 
 The code in this repository is distributed under the [Apache License 2.0](LICENSE). It does not
-cover the 1C:Enterprise platform installed into the images.
+cover the 1C:Enterprise platform and 1C:EDT installed into the images.
 
 The build accepts the license agreement of the Microsoft Core Fonts automatically.

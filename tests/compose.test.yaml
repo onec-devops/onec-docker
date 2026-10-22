@@ -1,8 +1,11 @@
-# Override of compose.yaml for tests/smoke.sh
+# Override of compose.yaml for tests/smoke.sh. The EDT services take nothing from it through
+# extends, so they are listed too.
 services:
-  server:
+  server: &server
     ports: !reset []
-  full:
+  full: &full
     ports: !reset []
     environment:
       VNC_PASSWORD: smoke
+  server-edt: *server
+  full-edt: *full

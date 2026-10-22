@@ -9,7 +9,7 @@ die() {
     exit 1
 }
 
-: "${ONEC_VERSION:?is required, e.g. --build-arg ONEC_VERSION=8.3.25.1633}"
+: "${ONEC_VERSION:?is required, e.g. --build-arg ONEC_VERSION=8.3.27.2342}"
 : "${ONEC_COMPONENTS:=server,ws}"
 ONEC_COMPONENTS=${ONEC_COMPONENTS//[[:space:]]/}
 

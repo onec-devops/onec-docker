@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Smoke tests for the built images, reported in TAP format (https://testanything.org).
-# Run after `docker compose build server` (and `docker compose build full` for part 4):
+# Run after `docker compose build` of the services to test, see usage below. Each image gets
+# the parts for its kind: 1-3 the server and server-edt images, 4 the full and full-edt
+# images, 5 both EDT images.
 #   1. Server image: version label, user, locale, fonts, time zone, shared libraries
 #      of the binaries and modules, no clients, ibcmd runs as an arbitrary user, arguments
 #      that start with a key go to ragent, a ragent key the image sets itself is refused.
@@ -13,12 +15,15 @@
 #   3. The server service under a separate project without published ports: it keeps
 #      its MAC address, rac -> ras -> ragent lists the cluster, the container restarts
 #      when ras exits and stops on docker stop without being killed.
-#   4. Full image, skipped if not built: clients as configured by ONEC_CLIENT_COMPONENTS
+#   4. Full image: clients as configured by ONEC_CLIENT_COMPONENTS
 #      and their shared libraries, x11vnc serves the virtual display to VNC clients
 #      and to noVNC in a browser, the thin client opens an infobase served by ibsrv
 #      on a virtual display, also as an arbitrary user, the ibsrv command runs with
 #      the display too, the full service runs as the server with a display, a VNC
 #      server and noVNC, which come back after a restart.
+#   5. EDT images: 1cedtcli runs 1C:EDT of the version in the tag, which supports only the configured platform versions, imports an empty
+#      configuration into a project and exports it to XML as an arbitrary user, and ibcmd
+#      builds a .cf from the export.
 set -euo pipefail
 
 # Keep Git Bash on Windows from rewriting /opt/... into Windows paths
@@ -38,9 +43,17 @@ readonly onec_home=/opt/1cv8/current
 readonly arbitrary_user=1234:5678
 readonly compose=(docker compose --progress quiet -p "$project" -f compose.yaml -f tests/compose.test.yaml)
 
-image=$(docker compose config --images server)
-full_image=$(docker compose config --images full)
-version=${image##*:}
+usage() {
+    echo "Usage: tests/smoke.sh [service ...]"
+    echo "Tests the images of the services, any of server, full, server-edt and full-edt."
+    echo "Without services, tests those of them whose images are built. The versions and"
+    echo "the namespace of the images come from .env or the environment, as in compose.yaml."
+}
+
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    usage
+    exit
+fi
 
 tests=0
 failures=0
@@ -110,6 +123,10 @@ in_image() {
 
 in_full_image() {
     docker run --rm "$full_image" "$@"
+}
+
+in_edt_image() {
+    docker run --rm "$edt_image" "$@"
 }
 
 # Libraries that are not found, and libraries too old for a library that needs them
@@ -197,7 +214,7 @@ novnc_banner() {
 # the number of security types it offers with the types (2 is password authentication)
 # and the status line of the noVNC page
 full_display() {
-    "${compose[@]}" exec -T full bash -c '
+    "${compose[@]}" exec -T "$full_service" bash -c '
         xdpyinfo | sed -n "s/^ *dimensions: *\([0-9x]*\) .*/\1/p; s/^ *resolution: *\([0-9x]*\) .*/\1 dpi/p"
         xdpyinfo | sed -n "s/^ *depth of root window: *\([0-9]*\) .*/\1 bit/p"
         xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null && pgrep -x fluxbox >/dev/null && echo fluxbox
@@ -385,7 +402,55 @@ configured_mac_address() {
 
 # Client components of the full image as configured in compose.yaml
 configured_client_components() {
-    docker compose config --format json full | sed -n 's/.*"ONEC_CLIENT_COMPONENTS": *"\([^"]*\)".*/\1/p'
+    docker compose config --format json "$full_service" | sed -n 's/.*"ONEC_CLIENT_COMPONENTS": *"\([^"]*\)".*/\1/p'
+}
+
+# Platform versions 1C:EDT of the edt images supports as configured in compose.yaml, one per line;
+# the version of the image by default
+configured_edt_platform_versions() {
+    local versions platform_version=${edt_image##*:}
+    platform_version=${platform_version%%-*}
+    versions=$(docker compose config --format json "$edt_service" | sed -n 's/.*"EDT_PLATFORM_VERSIONS": *"\([^"]*\)".*/\1/p')
+    versions=${versions//[[:space:]]/}
+    tr , '\n' <<<"${versions:-${platform_version%.*}}" | sort -V
+}
+
+# edt_project_builds <platform version>: as an arbitrary user, ibcmd exports an empty
+# configuration to XML, 1cedtcli imports it into a project for the platform version
+# and exports the project back to XML, then ibcmd loads that export into an infobase
+# and saves it as a .cf; prints what came out of each step and the end of the output
+# of a failed one
+edt_project_builds() {
+    # shellcheck disable=SC2016 # expanded inside the container
+    docker run --rm --user "$arbitrary_user" "$edt_image" bash -c '
+        if ibcmd infobase create --db-path=/tmp/empty >/tmp/ibcmd.log 2>&1 \
+            && ibcmd infobase config export --db-path=/tmp/empty /tmp/empty-xml >>/tmp/ibcmd.log 2>&1; then
+            echo "empty configuration exported"
+        else
+            tail -n 20 /tmp/ibcmd.log
+            exit 1
+        fi
+        # Two runs: in one -file run the export after the import hangs past -timeout.
+        # 1cedtcli exits with 0 on most errors, so its result is told by the files.
+        1cedtcli -data /tmp/workspace -timeout 300 -command import --configuration-files /tmp/empty-xml \
+            --project /tmp/project --version "$1" >/tmp/edt.log 2>&1
+        1cedtcli -data /tmp/workspace -timeout 300 -command export --project /tmp/project \
+            --configuration-files /tmp/xml >>/tmp/edt.log 2>&1
+        if [[ -s /tmp/project/src/Configuration/Configuration.mdo && -s /tmp/xml/Configuration.xml ]]; then
+            echo "project imported and exported"
+        else
+            find /tmp/project /tmp/xml -type f 2>/dev/null
+            tail -n 20 /tmp/edt.log
+            exit 1
+        fi
+        if ibcmd infobase create --db-path=/tmp/ib --import=/tmp/xml >>/tmp/ibcmd.log 2>&1 \
+            && ibcmd infobase config save --db-path=/tmp/ib /tmp/smoke.cf >>/tmp/ibcmd.log 2>&1 \
+            && test -s /tmp/smoke.cf; then
+            echo "cf saved"
+        else
+            tail -n 20 /tmp/ibcmd.log
+            exit 1
+        fi' bash "$1"
 }
 
 # rac_lists_cluster <service>: succeeds once rac lists at least one cluster through ras
@@ -435,54 +500,69 @@ service_starts() {
     return 1
 }
 
-cleanup() {
-    docker rm -fv "$ibsrv_container" "$client_container" "$nodisplay_container" "$key_container" \
-        >/dev/null 2>&1 || true
-    docker volume rm "$seed_volume" >/dev/null 2>&1 || true
-    "${compose[@]}" --profile '*' down -v --remove-orphans >/dev/null 2>&1 || true
+# server_tests <service>: parts 1-3
+server_tests() {
+    local server_service=$1 image version
+    image=$(docker compose config --images "$server_service")
+    # The tag, which the version label repeats: 8.3.27.2342-edt-2026.1.3 for an EDT image
+    version=${image##*:}
+    server_image_tests
+    ibsrv_tests
+    infobase_source_tests
+    server_service_tests
 }
-trap cleanup EXIT
-cleanup
 
-if ! docker image inspect "$image" >/dev/null 2>&1; then
-    echo "Bail out! Image $image not found, run docker compose build server first"
-    exit 1
-fi
+# Part 1
+server_image_tests() {
+    diag "Image $image"
+    check_eq "version label is $version" "$version" \
+        docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image"
+    check_eq "runs as usr1cv8 with fixed uid/gid" "uid=999(usr1cv8) gid=999(grp1cv8) groups=999(grp1cv8)" in_image id
+    # shellcheck disable=SC2016 # expanded inside the container
+    check_eq "locale is ru_RU.UTF-8" ru_RU.UTF-8 in_image bash -c 'locale -a | grep -qx ru_RU.utf8 && echo "$LANG"'
+    check_eq "clients are not installed" "" \
+        in_image find "$onec_home/" -maxdepth 1 \( -name 1cv8 -o -name 1cv8c -o -name 1cv8s \)
+    check_eq "shared libraries of the binaries and modules are resolved" "" missing_libraries
+    check_eq "Microsoft Core Fonts are installed" Arial in_image fc-match -f '%{family[0]}' Arial
+    check_eq "time zone is Europe/Moscow" MSK in_image date +%Z
+    check "ibcmd creates an infobase as an arbitrary user" \
+        docker run --rm --user "$arbitrary_user" "$image" ibcmd infobase create --db-path=/tmp/ib
+    check_contains "arguments that start with a key are passed to ragent" "-pingTimeout 30000" leading_key_runs_ragent
+    check_contains "a ragent key the image sets itself is refused" ONEC_PORT image_key_refused
+}
 
-diag "Image $image"
+# Part 2 up to ONEC_INFOBASE_SOURCE. The checks of the ibsrv container are left out if it
+# serves no infobase, since all of them would fail after that.
+ibsrv_tests() {
+    local status
+    diag "Standalone server (ibsrv)"
+    # shellcheck disable=SC2016 # expanded inside the container
+    check_eq "ibsrv --help creates no infobase" "" docker run --rm --entrypoint bash "$image" -c \
+        'entrypoint.sh ibsrv --help >/dev/null && find "$ONEC_SRV_DATA" -name 1Cv8.1CD'
+    check_eq "ibsrv with its own infobase location keeps the settings of the image" \
+        "$onec_home/ibsrv --data=/home/usr1cv8/.1cv8/1C/1cv8/standalone-server --config=/usr/local/etc/ibsrv.yml --db-path=/tmp/ib" \
+        ibsrv_with_own_infobase
+    check_contains "ibsrv takes a settings file of the user from the settings of the platform" \
+        "port 9000 is open" ibsrv_with_own_settings
+    docker run -d --name "$ibsrv_container" "$image" ibsrv --name=smoke >/dev/null
+    if ! status=$(odata_status "\$metadata") || [[ $status != 200 ]]; then
+        not_ok "ibsrv creates an infobase on the first start, OData \$metadata returns 200" "got: $status"
+        return
+    fi
+    ok "ibsrv creates an infobase on the first start, OData \$metadata returns 200"
+    check "the container with ibsrv becomes healthy" container_healthy "$ibsrv_container"
+    check "ibsrv keeps the infobase on restart" infobase_kept_on_restart
+    check "the container with ibsrv becomes healthy again after the restart" container_healthy "$ibsrv_container"
+    check_eq "ibsrv stops on docker stop in time" 143 container_stop_exit_code "$ibsrv_container"
+}
 
-check_eq "version label is $version" "$version" \
-    docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image"
-check_eq "runs as usr1cv8 with fixed uid/gid" "uid=999(usr1cv8) gid=999(grp1cv8) groups=999(grp1cv8)" in_image id
-# shellcheck disable=SC2016 # expanded inside the container
-check_eq "locale is ru_RU.UTF-8" ru_RU.UTF-8 in_image bash -c 'locale -a | grep -qx ru_RU.utf8 && echo "$LANG"'
-check_eq "clients are not installed" "" \
-    in_image find "$onec_home/" -maxdepth 1 \( -name 1cv8 -o -name 1cv8c -o -name 1cv8s \)
-check_eq "shared libraries of the binaries and modules are resolved" "" missing_libraries
-check_eq "Microsoft Core Fonts are installed" Arial in_image fc-match -f '%{family[0]}' Arial
-check_eq "time zone is Europe/Moscow" MSK in_image date +%Z
-check "ibcmd creates an infobase as an arbitrary user" \
-    docker run --rm --user "$arbitrary_user" "$image" ibcmd infobase create --db-path=/tmp/ib
-check_contains "arguments that start with a key are passed to ragent" "-pingTimeout 30000" leading_key_runs_ragent
-check_contains "a ragent key the image sets itself is refused" ONEC_PORT image_key_refused
-
-diag "Standalone server (ibsrv)"
-
-# shellcheck disable=SC2016 # expanded inside the container
-check_eq "ibsrv --help creates no infobase" "" docker run --rm --entrypoint bash "$image" -c \
-    'entrypoint.sh ibsrv --help >/dev/null && find "$ONEC_SRV_DATA" -name 1Cv8.1CD'
-check_eq "ibsrv with its own infobase location keeps the settings of the image" \
-    "$onec_home/ibsrv --data=/home/usr1cv8/.1cv8/1C/1cv8/standalone-server --config=/usr/local/etc/ibsrv.yml --db-path=/tmp/ib" \
-    ibsrv_with_own_infobase
-check_contains "ibsrv takes a settings file of the user from the settings of the platform" \
-    "port 9000 is open" ibsrv_with_own_settings
-docker run -d --name "$ibsrv_container" "$image" ibsrv --name=smoke >/dev/null
-check_eq "ibsrv creates an infobase on the first start, OData \$metadata returns 200" 200 odata_status "\$metadata"
-check "the container with ibsrv becomes healthy" container_healthy "$ibsrv_container"
-check "ibsrv keeps the infobase on restart" infobase_kept_on_restart
-check "the container with ibsrv becomes healthy again after the restart" container_healthy "$ibsrv_container"
-check_eq "ibsrv stops on docker stop in time" 143 container_stop_exit_code "$ibsrv_container"
-if output=$(make_seed_infobase 2>&1); then
+# Part 2, ONEC_INFOBASE_SOURCE
+infobase_source_tests() {
+    local output
+    if ! output=$(make_seed_infobase 2>&1); then
+        not_ok "an infobase to start ibsrv from is prepared" "$output"
+        return
+    fi
     check_contains "ibsrv takes the infobase from a .1CD file in ONEC_INFOBASE_SOURCE" '"Seed"' infobase_from seed.1CD
     check_contains "ibsrv restores the infobase from a dump under any name in ONEC_INFOBASE_SOURCE" '"Seed"' infobase_from dump
     check_eq "ibsrv refuses a missing file in ONEC_INFOBASE_SOURCE and creates no infobase" \
@@ -494,29 +574,30 @@ if output=$(make_seed_infobase 2>&1); then
     check_eq "ibsrv refuses a file that is neither a file infobase nor a dump" \
         $'entrypoint: ONEC_INFOBASE_SOURCE: /seed/garbage.dt is neither a file infobase nor a dump\ndata left: []' \
         infobase_source_refused garbage.dt
-else
-    not_ok "an infobase to start ibsrv from is prepared" "$output"
-fi
+}
 
-diag "Service server ($project)"
+# Part 3
+server_service_tests() {
+    local output
+    diag "Service $server_service ($project)"
+    if ! output=$(service_starts "$server_service"); then
+        not_ok "$server_service starts and is healthy" "$output"
+        return
+    fi
+    ok "$server_service starts and is healthy"
+    check_eq "$server_service has the MAC address from compose.yaml" "$(configured_mac_address "$server_service")" \
+        "${compose[@]}" exec -T "$server_service" cat /sys/class/net/eth0/address
+    check "rac lists the cluster through ras" rac_lists_cluster "$server_service"
+    check "container restarts when ras exits" ras_exit_restarts "$server_service"
+    check_eq "stops on docker stop without being killed" 143 stop_exit_code "$server_service"
+}
 
-if output=$(service_starts server); then
-    ok "server starts and is healthy"
-    check_eq "server has the MAC address from compose.yaml" "$(configured_mac_address server)" \
-        "${compose[@]}" exec -T server cat /sys/class/net/eth0/address
-    check "rac lists the cluster through ras" rac_lists_cluster server
-    check "container restarts when ras exits" ras_exit_restarts server
-    check_eq "stops on docker stop without being killed" 143 stop_exit_code server
-else
-    not_ok "server starts and is healthy" "$output"
-fi
-"${compose[@]}" --profile '*' down >/dev/null 2>&1 || true
-
-diag "Image $full_image"
-
-if docker image inspect "$full_image" >/dev/null 2>&1; then
-    client_components=$(configured_client_components)
-    if [[ ,$client_components, == *,client_full,* ]]; then
+# full_tests <service>: part 4
+full_tests() {
+    local full_service=$1 full_image output
+    full_image=$(docker compose config --images "$full_service")
+    diag "Image $full_image"
+    if [[ ,$(configured_client_components), == *,client_full,* ]]; then
         check "1cv8 (thick client) is executable, client_full requested" in_full_image test -x "$onec_home/1cv8"
     else
         check "1cv8 (thick client) is not installed, client_full not requested" \
@@ -532,20 +613,92 @@ if docker image inspect "$full_image" >/dev/null 2>&1; then
     check "thin client opens the infobase as an arbitrary user" thin_client_opens --user "$arbitrary_user"
     check "the ibsrv command runs the standalone server with the display" ibsrv_with_display
     check "START_DISPLAY=false runs the server without the display" display_disabled
-    if output=$(service_starts full); then
-        ok "full service starts as the server and is healthy"
-        check_eq "full runs a display with a window manager, a VNC server with a password and noVNC" \
-            $'1920x1080\n96x96 dpi\n24 bit\nfluxbox\n\nRFB 003.008\n1 2\nHTTP/1.1 200 OK' full_display
-        check "full restarts with the display when ras exits" ras_exit_restarts full
-        check_eq "the display is back after the restart" \
-            $'1920x1080\n96x96 dpi\n24 bit\nfluxbox\n\nRFB 003.008\n1 2\nHTTP/1.1 200 OK' full_display
-        check_eq "full stops on docker stop without being killed" 143 stop_exit_code full
-    else
-        not_ok "full service starts as the server and is healthy" "$output"
+    if ! output=$(service_starts "$full_service"); then
+        not_ok "$full_service service starts as the server and is healthy" "$output"
+        return
     fi
-else
-    skip "full image tests" "image $full_image not found, run docker compose build full"
+    ok "$full_service service starts as the server and is healthy"
+    check_eq "$full_service runs a display with a window manager, a VNC server with a password and noVNC" \
+        $'1920x1080\n96x96 dpi\n24 bit\nfluxbox\n\nRFB 003.008\n1 2\nHTTP/1.1 200 OK' full_display
+    check "$full_service restarts with the display when ras exits" ras_exit_restarts "$full_service"
+    check_eq "the display is back after the restart" \
+        $'1920x1080\n96x96 dpi\n24 bit\nfluxbox\n\nRFB 003.008\n1 2\nHTTP/1.1 200 OK' full_display
+    check_eq "$full_service stops on docker stop without being killed" 143 stop_exit_code "$full_service"
+}
+
+# edt_tests <service>: part 5. full-edt sets DISPLAY like full, but 1cedtcli runs there
+# without the display the entrypoint starts only for the server.
+edt_tests() {
+    local edt_service=$1 edt_image edt_version edt_platform_versions
+    edt_image=$(docker compose config --images "$edt_service")
+    edt_version=${edt_image##*-}
+    diag "Image $edt_image"
+    check_contains "1cedtcli in PATH runs 1C:EDT $edt_version" "$edt_version" \
+        in_edt_image 1cedtcli -command version
+    edt_platform_versions=$(configured_edt_platform_versions)
+    check_eq "1C:EDT supports only the platform versions $(paste -sd, <<<"$edt_platform_versions")" \
+        "$edt_platform_versions" in_edt_image 1cedtcli -command platform-versions
+    # The export loads only into the platform it is made for or a newer one
+    check_eq "1cedtcli imports an empty configuration as an arbitrary user and exports it for ibcmd to build a .cf" \
+        $'empty configuration exported\nproject imported and exported\ncf saved' \
+        edt_project_builds "$(head -n 1 <<<"$edt_platform_versions")"
+}
+
+cleanup() {
+    docker rm -fv "$ibsrv_container" "$client_container" "$nodisplay_container" "$key_container" \
+        >/dev/null 2>&1 || true
+    docker volume rm "$seed_volume" >/dev/null 2>&1 || true
+    "${compose[@]}" --profile '*' down -v --remove-orphans >/dev/null 2>&1 || true
+}
+image_built() {
+    docker image inspect "$(docker compose config --images "$1")" >/dev/null 2>&1
+}
+
+# The images not built are skipped when no services are given, and refused when they are
+skip_missing=false
+if [[ $# -eq 0 ]]; then
+    set -- server full server-edt full-edt
+    skip_missing=true
 fi
+for service; do
+    # tests/compose.test.yaml keeps only these services from publishing ports on the host
+    if [[ ! $service =~ ^(server|full)(-edt)?$ ]]; then
+        echo "Bail out! Unknown service $service, see tests/smoke.sh --help"
+        exit 1
+    fi
+done
+built=false
+for service; do
+    if image_built "$service"; then
+        built=true
+    elif [[ $skip_missing == false ]]; then
+        echo "Bail out! Image of $service not found, run docker compose build $service first"
+        exit 1
+    fi
+done
+if [[ $built == false ]]; then
+    echo "Bail out! No image is built, run docker compose build server first"
+    exit 1
+fi
+
+trap cleanup EXIT
+cleanup
+
+for service; do
+    if ! image_built "$service"; then
+        skip "$service image tests" "image not found, run docker compose build $service"
+        continue
+    fi
+    case $service in
+        server*) server_tests "$service" ;;
+        full*) full_tests "$service" ;;
+    esac
+    if [[ $service == *-edt ]]; then
+        edt_tests "$service"
+    fi
+    # The containers of the next service take the same names
+    cleanup
+done
 
 echo "1..$tests"
 if [[ $failures -gt 0 ]]; then

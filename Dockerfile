@@ -49,6 +49,29 @@ RUN rm -rf "/opt/1cv8/x86_64/${ONEC_VERSION}/ExtDst" \
         if cmp -s "$f" "$platform_file"; then ln -sf "$platform_file" "$f"; fi; \
     done
 
+# 1C:EDT with its Java. The installation runs 1C:EDT, which needs GTK and a UTF-8 locale.
+FROM debian:bookworm-slim AS installer-edt
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV LANG=C.UTF-8
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgtk-3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --link --chmod=755 docker/install-1cedt.sh /usr/local/bin/install-1cedt.sh
+
+ARG ONEC_VERSION
+ARG EDT_VERSION
+ARG EDT_ARCHIVE
+ARG EDT_PLATFORM_VERSIONS
+
+RUN --mount=type=bind,source=distr,target=/tmp/distr \
+    ONEC_VERSION="${ONEC_VERSION}" EDT_VERSION="${EDT_VERSION}" EDT_ARCHIVE="${EDT_ARCHIVE}" \
+    EDT_PLATFORM_VERSIONS="${EDT_PLATFORM_VERSIONS}" \
+    install-1cedt.sh /tmp/distr
+
 # The noVNC web client with websockify, its WebSocket proxy to the VNC server, laid out
 # the way novnc_proxy expects. Upstream releases are used because the Debian packages are
 # older and depend on Node.js and numpy.
@@ -224,6 +247,44 @@ COPY --link --from=installer-full /opt/1cv8 /opt/1cv8
 
 # 5900 - VNC server (x11vnc), 6080 - noVNC
 EXPOSE 5900 6080
+
+FROM server AS server-edt
+
+ARG ONEC_VERSION
+ARG EDT_VERSION
+ARG DEBIAN_FRONTEND=noninteractive
+
+LABEL org.opencontainers.image.title="1C:Enterprise 8.3 server and 1C:EDT" \
+      org.opencontainers.image.version="${ONEC_VERSION}-edt-${EDT_VERSION}"
+
+ENV EDT_HOME=/opt/1C/1CE/components/1c-edt
+ENV PATH=${PATH}:${EDT_HOME}
+
+USER 0
+
+# Without GTK 1C:EDT does not load the support of the BSL language and leaves the modules
+# out of the export
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgtk-3-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+USER 999:999
+
+COPY --link --from=installer-edt /opt/1C/1CE/components /opt/1C/1CE/components
+
+# GTK, which 1C:EDT needs, comes with the clients
+FROM full AS full-edt
+
+ARG ONEC_VERSION
+ARG EDT_VERSION
+
+LABEL org.opencontainers.image.title="1C:Enterprise 8.3 server, clients and 1C:EDT" \
+      org.opencontainers.image.version="${ONEC_VERSION}-edt-${EDT_VERSION}"
+
+ENV EDT_HOME=/opt/1C/1CE/components/1c-edt
+ENV PATH=${PATH}:${EDT_HOME}
+
+COPY --link --from=installer-edt /opt/1C/1CE/components /opt/1C/1CE/components
 
 # The server is the default target
 FROM server
