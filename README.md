@@ -1,6 +1,6 @@
 # Onec Docker
 
-English | [Русский](README_ru.md)
+English | [Русский](README.ru.md)
 
 The 1C:Enterprise 8.3 platform in Docker. A server in a container suits development and test
 environments: it is easy to start, to recreate from scratch or to move to another platform
