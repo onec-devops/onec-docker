@@ -43,13 +43,15 @@ edt_dirs=("$components_dir/1c-edt-$EDT_VERSION+"*-x86_64)
     || die "1C:EDT $EDT_VERSION not found in $components_dir, check that EDT_VERSION matches the distribution"
 edt_dir=${edt_dirs[0]}
 jdk_dirs=("$components_dir"/axiom-jdk-full-*-x86_64)
-java=${jdk_dirs[0]}/bin/java
-[[ -x $java ]] || die "Java not found in $components_dir"
+[[ -x ${jdk_dirs[0]}/bin/java ]] || die "Java not found in $components_dir"
+
+# Links without the versions, which the images use for EDT_HOME and JAVA_HOME
+ln -s "${edt_dir##*/}" "$components_dir/1c-edt"
+ln -s "${jdk_dirs[0]##*/}" "$components_dir/axiom-jdk-full"
 
 # The launcher looks for Java in the registry of the installer, which is not copied
 # into the image
-sed -i "/^-vmargs\$/i -vm\n$java" "$edt_dir/1cedt.ini"
-ln -s "${edt_dir##*/}" "$components_dir/1c-edt"
+sed -i "/^-vmargs\$/i -vm\n$components_dir/axiom-jdk-full/bin/java" "$edt_dir/1cedt.ini"
 
 workspace=$(mktemp -d)
 platform_versions() {
