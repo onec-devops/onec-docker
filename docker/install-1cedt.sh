@@ -10,7 +10,7 @@ die() {
     exit 1
 }
 
-: "${EDT_VERSION:?is required, e.g. --build-arg EDT_VERSION=2026.1.3}"
+: "${EDT_VERSION:?is required, e.g. --build-arg EDT_VERSION=2026.2.2}"
 : "${ONEC_VERSION:?is required, e.g. --build-arg ONEC_VERSION=8.3.27.2342}"
 # The support of each platform version takes up to 1 GB, so only the version of the image
 # is kept by default
@@ -20,7 +20,7 @@ EDT_PLATFORM_VERSIONS=${EDT_PLATFORM_VERSIONS//[[:space:]]/}
 distr_dir=${1:-/tmp/distr}
 components_dir=/opt/1C/1CE/components
 
-# The name also carries the build number, such as _25 for 2026.1.3
+# The name also carries the build number, such as _21 for 2026.2.2
 wanted=${EDT_ARCHIVE:-1c_edt_distr_offline_${EDT_VERSION}_*_linux_x86_64.tar.gz}
 mapfile -t archives < <(find "$distr_dir" -maxdepth 1 -type f -name "$wanted")
 if [[ ${#archives[@]} -ne 1 ]]; then
