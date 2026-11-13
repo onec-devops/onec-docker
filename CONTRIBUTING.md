@@ -10,7 +10,7 @@ issue first to agree on the approach.
 - Cover a change of behaviour with a check in `tests/smoke.sh`. A check tests what the image
   does, not what the `Dockerfile` states.
 - Make sure the linters and `tests/smoke.sh` pass.
-- Update both [README.md](README.md) and [README_ru.md](README_ru.md).
+- Update both [README.md](README.md) and [README.ru.md](README.ru.md).
 
 ## How the images work
 
