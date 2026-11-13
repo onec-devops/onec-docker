@@ -33,6 +33,8 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 | `onec-devops/1cv8-server:<version>-edt-<EDT version>` | The same server with 1C:EDT. It builds 1C:EDT projects: `1cedtcli` exports a project to XML files, and `ibcmd` makes a configuration file of them. |
 | `onec-devops/1cv8-full:<version>-edt-<EDT version>` | The `full` image with 1C:EDT, for a project built from 1C:EDT sources and tested in the clients in the same container. |
 
+Every image has a JDK 17 with `JAVA_HOME` for build tools such as Gradle.
+
 ## Getting started
 
 1. Download the platform distribution for Linux from https://releases.1c.ru, the archive

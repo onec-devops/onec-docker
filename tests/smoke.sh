@@ -2,7 +2,7 @@
 # Smoke tests for the built images, reported in TAP format (https://testanything.org).
 # Run after `docker compose build` of the services to test, see usage below. Each image gets
 # the parts for its kind: 1-3 the server and server-edt images, 4 the full and full-edt
-# images, 5 both EDT images.
+# images, 5 both EDT images, 6 every image.
 #   1. Server image: version label, user, locale, fonts, time zone, shared libraries
 #      of the binaries and modules, no clients, ibcmd runs as an arbitrary user, arguments
 #      that start with a key go to ragent, a ragent key the image sets itself is refused.
@@ -24,6 +24,7 @@
 #   5. EDT images: 1cedtcli runs 1C:EDT of the version in the tag, which supports only the configured platform versions, imports an empty
 #      configuration into a project and exports it to XML as an arbitrary user, and ibcmd
 #      builds a .cf from the export.
+#   6. Java: java and javac in PATH come from JAVA_HOME, and no other Java is in the image.
 set -euo pipefail
 
 # Keep Git Bash on Windows from rewriting /opt/... into Windows paths
@@ -644,6 +645,34 @@ edt_tests() {
         edt_project_builds "$(head -n 1 <<<"$edt_platform_versions")"
 }
 
+# Succeeds if java in PATH and javac are those of JAVA_HOME and no other java is in the image;
+# prints what was found otherwise
+single_java() {
+    # shellcheck disable=SC2016 # expanded inside the container
+    in_java_image bash -c '
+        home=$(readlink -f "$JAVA_HOME")
+        status=0
+        for tool in java javac; do
+            path=$(readlink -f "$(command -v "$tool")")
+            [[ $path == "$home/bin/$tool" ]] || { echo "$tool: $path, JAVA_HOME: $home"; status=1; }
+        done
+        found=$(find / -xdev -type f -name java -perm -u+x 2>/dev/null)
+        [[ $found == "$home/bin/java" ]] || { echo "java found: $found"; status=1; }
+        exit "$status"'
+}
+
+in_java_image() {
+    docker run --rm "$java_image" "$@"
+}
+
+# java_tests <service>: part 6
+java_tests() {
+    local java_image
+    java_image=$(docker compose config --images "$1")
+    diag "Java in $java_image"
+    check "java and javac come from JAVA_HOME, the only Java in the image" single_java
+}
+
 cleanup() {
     docker rm -fv "$ibsrv_container" "$client_container" "$nodisplay_container" "$key_container" \
         >/dev/null 2>&1 || true
@@ -696,6 +725,7 @@ for service; do
     if [[ $service == *-edt ]]; then
         edt_tests "$service"
     fi
+    java_tests "$service"
     # The containers of the next service take the same names
     cleanup
 done

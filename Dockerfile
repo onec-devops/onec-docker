@@ -183,13 +183,27 @@ CMD ["ragent"]
 HEALTHCHECK --interval=10s --timeout=5s --start-period=1m --start-interval=1s --retries=6 \
     CMD ["healthcheck.sh"]
 
-FROM runtime AS server
+FROM runtime AS server-base
 
 LABEL org.opencontainers.image.title="1C:Enterprise 8.3 server"
 
 COPY --link --from=installer-server /opt/1cv8 /opt/1cv8
 
-FROM runtime AS full
+# The JDK of Debian. The EDT images use the one 1C:EDT comes with instead, so they are built
+# from the stages without it and have only one Java.
+FROM server-base AS server
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+USER 0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+USER 999:999
+
+FROM runtime AS full-base
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -248,7 +262,19 @@ COPY --link --from=installer-full /opt/1cv8 /opt/1cv8
 # 5900 - VNC server (x11vnc), 6080 - noVNC
 EXPOSE 5900 6080
 
-FROM server AS server-edt
+FROM full-base AS full
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
+USER 0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+USER 999:999
+
+FROM server-base AS server-edt
 
 ARG ONEC_VERSION
 ARG EDT_VERSION
@@ -257,8 +283,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 LABEL org.opencontainers.image.title="1C:Enterprise 8.3 server and 1C:EDT" \
       org.opencontainers.image.version="${ONEC_VERSION}-edt-${EDT_VERSION}"
 
-ENV EDT_HOME=/opt/1C/1CE/components/1c-edt
-ENV PATH=${PATH}:${EDT_HOME}
+ENV EDT_HOME=/opt/1C/1CE/components/1c-edt \
+    JAVA_HOME=/opt/1C/1CE/components/axiom-jdk-full
+ENV PATH=${PATH}:${EDT_HOME}:${JAVA_HOME}/bin
 
 USER 0
 
@@ -273,7 +300,7 @@ USER 999:999
 COPY --link --from=installer-edt /opt/1C/1CE/components /opt/1C/1CE/components
 
 # GTK, which 1C:EDT needs, comes with the clients
-FROM full AS full-edt
+FROM full-base AS full-edt
 
 ARG ONEC_VERSION
 ARG EDT_VERSION
@@ -281,8 +308,9 @@ ARG EDT_VERSION
 LABEL org.opencontainers.image.title="1C:Enterprise 8.3 server, clients and 1C:EDT" \
       org.opencontainers.image.version="${ONEC_VERSION}-edt-${EDT_VERSION}"
 
-ENV EDT_HOME=/opt/1C/1CE/components/1c-edt
-ENV PATH=${PATH}:${EDT_HOME}
+ENV EDT_HOME=/opt/1C/1CE/components/1c-edt \
+    JAVA_HOME=/opt/1C/1CE/components/axiom-jdk-full
+ENV PATH=${PATH}:${EDT_HOME}:${JAVA_HOME}/bin
 
 COPY --link --from=installer-edt /opt/1C/1CE/components /opt/1C/1CE/components
 
