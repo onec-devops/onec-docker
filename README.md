@@ -18,7 +18,7 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 - The 1C:Enterprise 8.3 platform distribution for Linux x86_64. The project is tested with
   8.3.20.2290, 8.3.22.2557, 8.3.25.1633 and 8.3.27.2342.
 - For the `server-edt` and `full-edt` images, the offline distribution of 1C:EDT for Linux.
-  The project is tested with 2026.1.3.
+  The project is tested with 2026.2.2.
 - Docker Engine with BuildKit, or Docker Desktop.
 - Docker Compose 2.24.4 or newer.
 - Free disk space. At least 8 GB to build `server`, about 2 GB for the built image. For `full`
@@ -33,7 +33,7 @@ The stack has no DBMS, so server infobases need a separate PostgreSQL or Microso
 | `onec-devops/1cv8-server:<version>-edt-<EDT version>` | The same server with 1C:EDT. It builds 1C:EDT projects: `1cedtcli` exports a project to XML files, and `ibcmd` makes a configuration file of them. |
 | `onec-devops/1cv8-full:<version>-edt-<EDT version>` | The `full` image with 1C:EDT, for a project built from 1C:EDT sources and tested in the clients in the same container. |
 
-Every image has a JDK 17 with `JAVA_HOME` for build tools such as Gradle.
+Every image has a JDK with `JAVA_HOME` for build tools such as Gradle.
 
 ## Getting started
 
@@ -364,7 +364,7 @@ https://releases.1c.ru. It is put into `distr/` next to the platform archive wit
 and its version is set in `EDT_VERSION` in `.env`:
 
 ```sh
-EDT_VERSION=2026.1.3
+EDT_VERSION=2026.2.2
 ```
 
 Then the image is built:
@@ -373,9 +373,9 @@ Then the image is built:
 docker compose build server-edt
 ```
 
-The result is the image `onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3`, tagged with the platform
+The result is the image `onec-devops/1cv8-server:8.3.27.2342-edt-2026.2.2`, tagged with the platform
 version and the 1C:EDT version. `docker compose build full-edt` builds
-`onec-devops/1cv8-full:8.3.27.2342-edt-2026.1.3`.
+`onec-devops/1cv8-full:8.3.27.2342-edt-2026.2.2`.
 
 1C:EDT exports a project only if it supports the platform version of the project, the
 `Runtime-Version` line in `DT-INF/PROJECT.PMF`. The image supports only the version of its
@@ -386,7 +386,7 @@ separated by commas, for example `EDT_PLATFORM_VERSIONS=8.3.22,8.3.27`.
 the project in the `my-project` directory and builds `my-project.cf` from it:
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3 bash -c '
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342-edt-2026.2.2 bash -c '
     1cedtcli -data /tmp/workspace -timeout 600 -command export \
         --project /work/my-project --configuration-files /tmp/xml
     ibcmd infobase create --db-path=/tmp/ib --import=/tmp/xml

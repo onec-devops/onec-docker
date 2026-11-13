@@ -75,7 +75,7 @@ The [CI](.github/workflows/ci.yml) workflow runs the linters, builds the images 
 On `main`, the tested images are pushed to the GitHub Container registry as the
 private packages `1cv8-server` and `1cv8-full` of the repository owner, for example
 `ghcr.io/onec-devops/1cv8-server:8.3.27.2342` and
-`ghcr.io/onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3`. Other repositories, such as the CI of
+`ghcr.io/onec-devops/1cv8-server:8.3.27.2342-edt-2026.2.2`. Other repositories, such as the CI of
 a project that tests against the platform, get read access to them under
 "Manage Actions access" in the package settings. The packages must stay private, because the
 images contain the platform, and a package made public cannot be made private again.
@@ -105,8 +105,8 @@ of them needs its archive in the registry. Each version is built twice: as the `
 ```sh
 cd distr
 oras push --artifact-type application/vnd.onec-devops.1cedt.installer \
-    ghcr.io/<repository owner>/1cedt-installer:2026.1.3 \
-    1c_edt_distr_offline_2026.1.3_25_linux_x86_64.tar.gz
+    ghcr.io/<repository owner>/1cedt-installer:2026.2.2 \
+    1c_edt_distr_offline_2026.2.2_21_linux_x86_64.tar.gz
 ```
 
 ## License

@@ -505,7 +505,7 @@ service_starts() {
 server_tests() {
     local server_service=$1 image version
     image=$(docker compose config --images "$server_service")
-    # The tag, which the version label repeats: 8.3.27.2342-edt-2026.1.3 for an EDT image
+    # The tag, which the version label repeats: 8.3.27.2342-edt-2026.2.2 for an EDT image
     version=${image##*:}
     server_image_tests
     ibsrv_tests

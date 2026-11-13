@@ -19,7 +19,7 @@ Microsoft SQL Server.
 - Дистрибутив платформы 1С:Предприятия 8.3 для Linux x86_64. Проект проверен на версиях
   8.3.20.2290, 8.3.22.2557, 8.3.25.1633 и 8.3.27.2342.
 - Для образов `server-edt` и `full-edt` офлайн-дистрибутив 1C:EDT для Linux. Проект проверен
-  на версии 2026.1.3.
+  на версии 2026.2.2.
 - Docker Engine с BuildKit или Docker Desktop.
 - Docker Compose 2.24.4 или новее.
 - Свободное место на диске. Для сборки `server` не меньше 8 ГБ, для готового образа около 2 ГБ.
@@ -34,7 +34,7 @@ Microsoft SQL Server.
 | `onec-devops/1cv8-server:<версия>-edt-<версия EDT>` | Тот же сервер с 1C:EDT. В нём собираются проекты 1C:EDT: `1cedtcli` выгружает проект в XML-файлы, а `ibcmd` делает из них файл конфигурации. |
 | `onec-devops/1cv8-full:<версия>-edt-<версия EDT>` | Образ `full` с 1C:EDT. В нём проект собирается из исходников 1C:EDT и тестируется в клиентах в одном контейнере. |
 
-Для инструментов сборки, например Gradle, в каждом образе есть JDK 17 с `JAVA_HOME`.
+Для инструментов сборки, например Gradle, в каждом образе есть JDK с `JAVA_HOME`.
 
 ## Начало работы
 
@@ -366,7 +366,7 @@ Docker дисплей доступен напрямую, поэтому в об�
 в `EDT_VERSION` в файле `.env`:
 
 ```sh
-EDT_VERSION=2026.1.3
+EDT_VERSION=2026.2.2
 ```
 
 Затем образ собирается командой:
@@ -375,9 +375,9 @@ EDT_VERSION=2026.1.3
 docker compose build server-edt
 ```
 
-Получится образ `onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3` с тегом по версиям платформы
+Получится образ `onec-devops/1cv8-server:8.3.27.2342-edt-2026.2.2` с тегом по версиям платформы
 и 1C:EDT. Команда `docker compose build full-edt` собирает образ
-`onec-devops/1cv8-full:8.3.27.2342-edt-2026.1.3`.
+`onec-devops/1cv8-full:8.3.27.2342-edt-2026.2.2`.
 
 1C:EDT выгружает проект, только если поддерживает его версию платформы. Она указана в строке
 `Runtime-Version` файла `DT-INF/PROJECT.PMF`. Образ поддерживает только версию своей
@@ -388,7 +388,7 @@ docker compose build server-edt
 выгружает проект из каталога `my-project` и собирает из него `my-project.cf`:
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342-edt-2026.1.3 bash -c '
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" onec-devops/1cv8-server:8.3.27.2342-edt-2026.2.2 bash -c '
     1cedtcli -data /tmp/workspace -timeout 600 -command export \
         --project /work/my-project --configuration-files /tmp/xml
     ibcmd infobase create --db-path=/tmp/ib --import=/tmp/xml
