@@ -2,6 +2,10 @@
 
 [English](README.md) | Русский
 
+[![CI](https://github.com/onec-devops/onec-docker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/onec-devops/onec-docker/actions/workflows/ci.yml)
+[![1C:Enterprise](https://img.shields.io/badge/1C%3AEnterprise-8.3.20--8.3.27-blue)](https://github.com/orgs/onec-devops/packages?repo_name=onec-docker)
+[![1C:EDT](https://img.shields.io/badge/1C%3AEDT-2026.2.2-blue)](https://github.com/orgs/onec-devops/packages?repo_name=onec-docker)
+
 Платформа 1С:Предприятия 8.3 в Docker. Сервер в контейнере удобен для разработки и тестовых
 стендов: его легко поднять, пересоздать с нуля или перевести на другую версию платформы. Образ
 `full` запускает тот же сервер вместе с клиентами платформы и виртуальным дисплеем. Образы
