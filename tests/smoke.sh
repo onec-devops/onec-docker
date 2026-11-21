@@ -614,6 +614,8 @@ full_tests() {
     check "thin client opens the infobase as an arbitrary user" thin_client_opens --user "$arbitrary_user"
     check "the ibsrv command runs the standalone server with the display" ibsrv_with_display
     check "START_DISPLAY=false runs the server without the display" display_disabled
+    check_eq "the directory of the display sockets is open to every user" 1777 \
+        in_full_image stat -c %a /tmp/.X11-unix
     if ! output=$(service_starts "$full_service"); then
         not_ok "$full_service service starts as the server and is healthy" "$output"
         return
