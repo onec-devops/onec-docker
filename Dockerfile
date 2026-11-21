@@ -240,7 +240,9 @@ RUN --mount=type=bind,from=enchant,target=/tmp/enchant \
         xauth \
         xvfb \
         /tmp/enchant/libenchant1c2a_1.6.0-11.1+b1_amd64.deb \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Xvfb without root cannot create it and prints an error on every start
+    && install -d -m 1777 /tmp/.X11-unix
 
 USER 999:999
 
