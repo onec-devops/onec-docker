@@ -53,16 +53,20 @@ start_display() {
     novnc_proxy --listen 6080 --vnc localhost:5900 >/dev/null &
 }
 
-# stop_ibsrv <pid>: on SIGTERM ibsrv stops serving at once, but after it has had a session
-# its process never exits, so it is killed if it is still there a second later. The wait
-# is short because docker stop gives a container as little as three seconds.
-stop_ibsrv() {
-    kill -TERM "$1" 2>/dev/null || return 0
-    for _ in $(seq 10); do
-        kill -0 "$1" 2>/dev/null || return 0
-        sleep 0.1
-    done
-    kill -KILL "$1" 2>/dev/null || true
+# stop_processes <pid>...: stops the servers, giving them a second, as supervisord and
+# s6-overlay give a grace time before SIGKILL. On SIGTERM ibsrv stops serving at once but never
+# exits after it has had a session, and ras stopped while it is still starting says it has
+# stopped and never exits either. The wait is short because docker stop gives a container
+# as little as three seconds.
+stop_processes() {
+    kill -TERM "$@" 2>/dev/null || true
+    (
+        sleep 1
+        kill -KILL "$@" 2>/dev/null
+    ) &
+    local watchdog=$!
+    wait "$@" 2>/dev/null || true
+    kill "$watchdog" 2>/dev/null || true
 }
 
 # A user given with --user may have no entry in /etc/passwd. The platform crashes without
@@ -124,8 +128,7 @@ case "$cmd" in
         trap 'kill -TERM "${pids[@]}" 2>/dev/null || true' TERM INT
         status=0
         wait -n "${pids[@]}" || status=$?
-        kill -TERM "${pids[@]}" 2>/dev/null || true
-        wait "${pids[@]}" || true
+        stop_processes "${pids[@]}"
         exit "$status"
         ;;
     ras)
@@ -211,8 +214,8 @@ case "$cmd" in
         ) &
         pid=$!
         # A stop on request ends with the code of the signal, even when ibsrv had to be killed
-        trap 'stop_ibsrv "$pid"; exit 143' TERM
-        trap 'stop_ibsrv "$pid"; exit 130' INT
+        trap 'stop_processes "$pid"; exit 143' TERM
+        trap 'stop_processes "$pid"; exit 130' INT
         status=0
         wait "$pid" || status=$?
         exit "$status"
